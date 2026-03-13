@@ -6,7 +6,11 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "register": "node scripts/register-commands.js"
+    "register": "node scripts/register-commands.js",
+    "pm2:start": "pm2 start npm --name cosimgal -- start",
+    "pm2:reload": "npm run pm2:delete && npm run pm2:start",
+    "pm2:stop": "pm2 stop cosimgal",
+    "pm2:delete": "pm2 delete cosimgal"
   },
   "engines": {
     "node": ">=18"
