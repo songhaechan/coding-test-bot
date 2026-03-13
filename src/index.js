@@ -105,6 +105,35 @@ async function getParticipantIds(guild) {
     .map(m => m.id);
 }
 
+async function syncParticipants(guild) {
+  try {
+    if (!PARTICIPANT_ROLE_ID) return;
+    const role = guild.roles.cache.get(PARTICIPANT_ROLE_ID) || await guild.roles.fetch(PARTICIPANT_ROLE_ID).catch(() => null);
+    if (!role) {
+      console.warn(`[sync] Participant role (${PARTICIPANT_ROLE_ID}) not found in guild.`);
+      return;
+    }
+
+    // Role members are only available if members are cached. 
+    // ClientReady already fetches, but let's be sure.
+    if (role.members.size === 0 && guild.memberCount > 0) {
+      await guild.members.fetch();
+    }
+    
+    const members = role.members.filter(m => !m.user.bot);
+    console.log(`[sync] Syncing ${members.size} participants...`);
+    
+    let count = 0;
+    for (const [id, member] of members) {
+      await Storage.updateUser(id, member.user.username);
+      count++;
+    }
+    console.log(`[sync] Successfully synced ${count} participants.`);
+  } catch (e) {
+    console.error('[sync] Failed to sync participants:', e);
+  }
+}
+
 function isImageAttachment(att) {
   const ct = att.contentType || '';
   if (ct.startsWith('image/')) return true;
@@ -182,8 +211,9 @@ client.once(Events.ClientReady, async () => {
     const guild = await client.guilds.fetch(GUILD_ID).then(g => g.fetch());
     await guild.members.fetch();
     console.log(`[ready] Guild members cached: ${guild.members.cache.size}`);
+    await syncParticipants(guild);
   } catch (e) {
-    console.error('[ready] Failed to pre-fetch guild members:', e);
+    console.error('[ready] Failed to initial setup:', e);
   }
 
   // Schedule daily settlement for yesterday at KST midnight
@@ -273,16 +303,25 @@ client.on(Events.InteractionCreate, async (interaction) => {
     } else if (commandName === 'join') {
       await Storage.updateUser(interaction.user.id, interaction.user.username);
       if (!PARTICIPANT_ROLE_ID) return interaction.reply({ content: '참여자 역할 ID가 설정되지 않았습니다.', flags: MessageFlags.Ephemeral });
+      
+      // Use deferReply to avoid 3s timeout issue
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
       const member = await interaction.guild.members.fetch(interaction.user.id);
       if (member.roles.cache.has(PARTICIPANT_ROLE_ID)) {
-        return interaction.reply({ content: '이미 참여자 역할이 있습니다.', flags: MessageFlags.Ephemeral });
+        return interaction.editReply({ content: '이미 참여자 역할이 있습니다.' });
       }
       try {
         await member.roles.add(PARTICIPANT_ROLE_ID, 'Self-join via /join');
-        await interaction.reply({ content: '참여자 역할이 부여되었습니다. 환영합니다! 🎉', flags: MessageFlags.Ephemeral });
+        await interaction.editReply({ content: '참여자 역할이 부여되었습니다. 환영합니다! 🎉' });
       } catch (e) {
         console.error('Failed to add role on /join:', e);
-        await interaction.reply({ content: '역할을 부여하지 못했습니다. 봇 권한(Manage Roles)과 역할 순서를 확인해주세요.', flags: MessageFlags.Ephemeral });
+        // Double check if role was actually added despite the error
+        await member.fetch(true);
+        if (member.roles.cache.has(PARTICIPANT_ROLE_ID)) {
+          return interaction.editReply({ content: '참여자 역할이 부여되었습니다. 환영합니다! 🎉' });
+        }
+        await interaction.editReply({ content: '역할을 부여하지 못했습니다. 봇 권한(Manage Roles)과 역할 순서를 확인해주세요.' });
       }
     }
   } catch (e) {
@@ -303,6 +342,7 @@ client.on(Events.GuildMemberAdd, async (member) => {
     if (member.guild.id !== GUILD_ID) return;
     if (member.roles.cache.has(PARTICIPANT_ROLE_ID)) return;
     await member.roles.add(PARTICIPANT_ROLE_ID, 'Auto-assign on join');
+    await Storage.updateUser(member.id, member.user.username);
   } catch (e) {
     console.error('Failed to auto-assign role on join:', e);
   }
