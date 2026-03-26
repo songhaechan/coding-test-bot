@@ -290,11 +290,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const unv = participants.filter(id => !verified.includes(id));
       const mentions = unv.slice(0, 50).map(id => `<@${id}>`).join(', ') || '없음';
       await interaction.editReply({ content: `⚠️ 오늘 미인증 현황\n(${dateStr})\n\n대상: ${unv.length}명\n${mentions}` });
-    } else if (commandName === 'adminunverified') {
-      const isAdmin = ADMIN_ROLE_ID ? interaction.member.roles.cache.has(ADMIN_ROLE_ID) : interaction.memberPermissions.has(PermissionFlagsBits.Administrator);
-      if (!isAdmin) {
-        return interaction.reply({ content: '권한이 없습니다.', flags: MessageFlags.Ephemeral });
-      }
+    } else if (commandName === 'quietunverified') {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const guild = await interaction.guild.fetch();
       const dateStr = todayKSTStr();
@@ -306,7 +302,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const name = member ? (member.nickname || member.user.username) : id;
         return `• ${name}`;
       }).join('\n') || '없음';
-      await interaction.editReply({ content: `⚠️ 오늘 미인증 현황 (관리자)\n(${dateStr})\n\n대상: ${unv.length}명\n${lines}` });
+      await interaction.editReply({ content: `⚠️ 오늘 미인증 현황\n(${dateStr})\n\n대상: ${unv.length}명\n${lines}` });
     } else if (commandName === 'settle') {
       await Storage.updateUser(interaction.user.id, interaction.user.username);
       // Permission check
@@ -336,7 +332,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         ? history.map(r => `• ${r.date} — ${r.amount.toLocaleString()}원`).join('\n')
         : '없음';
       await interaction.reply({
-        content: `💰 ${label}(${yearMonth}) 내 벌금\n\n총액: **${total.toLocaleString()}원** (${history.length}회)\n\n날짜별 내역:\n${dateLines}\n\n3333369209276 카카오뱅크(송해찬)으로 보내주세요~!`,
+        content: `💰 ${label}(${yearMonth}) 내 벌금\n\n총액: **${total.toLocaleString()}원** (${history.length}회)\n\n날짜별 내역:\n${dateLines}\n\n벌금은 매월초에 3333369209276 카카오뱅크(송해찬)으로 보내주세요~! 보내주시고 메세지 부탁드려요!`,
         flags: MessageFlags.Ephemeral
       });
     } else if (commandName === 'join') {
@@ -424,10 +420,10 @@ async function registerCommandsOnce() {
       .setNameLocalizations({ ko: '내벌금' })
       .setDescriptionLocalizations({ ko: '내 누적 벌금 확인하기' }),
     new SlashCommandBuilder()
-      .setName('adminunverified')
-      .setDescription('(Admin) List unverified participants without pinging')
-      .setNameLocalizations({ ko: '관리자미인증' })
-      .setDescriptionLocalizations({ ko: '(관리자) 미인증자 조용히 확인하기' }),
+      .setName('quietunverified')
+      .setDescription('List unverified participants without pinging (only you can see)')
+      .setNameLocalizations({ ko: '미인증조용히' })
+      .setDescriptionLocalizations({ ko: '미인증자 조용히 확인하기 (나만 보임)' }),
     new SlashCommandBuilder()
       .setName('thismonthfine')
       .setDescription('Check your fines for this month')
