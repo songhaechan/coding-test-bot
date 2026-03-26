@@ -167,5 +167,14 @@ export const Storage = {
 
   async setLastProcessedDate(dateStr) {
     db.prepare('INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)').run('lastProcessedDate', dateStr);
+  },
+
+  async getMonthlyFine(userId, yearMonth) {
+    // yearMonth: "2026-03"
+    const history = db.prepare(
+      'SELECT date, amount FROM fine_history WHERE user_id = ? AND date LIKE ? ORDER BY date ASC'
+    ).all(userId, `${yearMonth}-%`);
+    const total = history.reduce((sum, r) => sum + r.amount, 0);
+    return { total, history };
   }
 };

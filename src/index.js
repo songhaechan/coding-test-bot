@@ -290,6 +290,23 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const unv = participants.filter(id => !verified.includes(id));
       const mentions = unv.slice(0, 50).map(id => `<@${id}>`).join(', ') || '없음';
       await interaction.editReply({ content: `⚠️ 오늘 미인증 현황\n(${dateStr})\n\n대상: ${unv.length}명\n${mentions}` });
+    } else if (commandName === 'adminunverified') {
+      const isAdmin = ADMIN_ROLE_ID ? interaction.member.roles.cache.has(ADMIN_ROLE_ID) : interaction.memberPermissions.has(PermissionFlagsBits.Administrator);
+      if (!isAdmin) {
+        return interaction.reply({ content: '권한이 없습니다.', flags: MessageFlags.Ephemeral });
+      }
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      const guild = await interaction.guild.fetch();
+      const dateStr = todayKSTStr();
+      const participants = await getParticipantIds(guild);
+      const verified = await Storage.getVerified(dateStr);
+      const unv = participants.filter(id => !verified.includes(id));
+      const lines = unv.map(id => {
+        const member = guild.members.cache.get(id);
+        const name = member ? (member.nickname || member.user.username) : id;
+        return `• ${name}`;
+      }).join('\n') || '없음';
+      await interaction.editReply({ content: `⚠️ 오늘 미인증 현황 (관리자)\n(${dateStr})\n\n대상: ${unv.length}명\n${lines}` });
     } else if (commandName === 'settle') {
       await Storage.updateUser(interaction.user.id, interaction.user.username);
       // Permission check
@@ -303,6 +320,25 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const { skipped, unverified } = await processFinesForDate(guild, dateStr, { force });
       if (skipped) return interaction.reply({ content: `이미 정산된 날짜입니다.\n(${dateStr})\n\nforce 옵션으로 재정산 가능합니다.`, flags: MessageFlags.Ephemeral });
       await interaction.reply({ content: `🧾 수동 정산 완료\n(${dateStr})\n\n미인증: ${unverified.length}명\n1인당: ${FINE_AMOUNT.toLocaleString()}원` });
+    } else if (commandName === 'thismonthfine' || commandName === 'lastmonthfine') {
+      await Storage.updateUser(interaction.user.id, interaction.user.username);
+      const kst = kstNowDate();
+      let yearMonth;
+      if (commandName === 'lastmonthfine') {
+        const d = new Date(kst.getFullYear(), kst.getMonth() - 1, 1);
+        yearMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      } else {
+        yearMonth = `${kst.getFullYear()}-${String(kst.getMonth() + 1).padStart(2, '0')}`;
+      }
+      const { total, history } = await Storage.getMonthlyFine(interaction.user.id, yearMonth);
+      const label = commandName === 'thismonthfine' ? '이번달' : '저번달';
+      const dateLines = history.length > 0
+        ? history.map(r => `• ${r.date} — ${r.amount.toLocaleString()}원`).join('\n')
+        : '없음';
+      await interaction.reply({
+        content: `💰 ${label}(${yearMonth}) 내 벌금\n\n총액: **${total.toLocaleString()}원** (${history.length}회)\n\n날짜별 내역:\n${dateLines}\n\n3333369209276 카카오뱅크(송해찬)으로 보내주세요~!`,
+        flags: MessageFlags.Ephemeral
+      });
     } else if (commandName === 'join') {
       await Storage.updateUser(interaction.user.id, interaction.user.username);
       if (!PARTICIPANT_ROLE_ID) return interaction.reply({ content: '참여자 역할 ID가 설정되지 않았습니다.', flags: MessageFlags.Ephemeral });
@@ -386,7 +422,22 @@ async function registerCommandsOnce() {
       .setName('myfine')
       .setDescription('Check your cumulative fines')
       .setNameLocalizations({ ko: '내벌금' })
-      .setDescriptionLocalizations({ ko: '내 누적 벌금 확인하기' })
+      .setDescriptionLocalizations({ ko: '내 누적 벌금 확인하기' }),
+    new SlashCommandBuilder()
+      .setName('adminunverified')
+      .setDescription('(Admin) List unverified participants without pinging')
+      .setNameLocalizations({ ko: '관리자미인증' })
+      .setDescriptionLocalizations({ ko: '(관리자) 미인증자 조용히 확인하기' }),
+    new SlashCommandBuilder()
+      .setName('thismonthfine')
+      .setDescription('Check your fines for this month')
+      .setNameLocalizations({ ko: '이번달내벌금' })
+      .setDescriptionLocalizations({ ko: '이번달 내 벌금 확인하기' }),
+    new SlashCommandBuilder()
+      .setName('lastmonthfine')
+      .setDescription('Check your fines for last month')
+      .setNameLocalizations({ ko: '저번달내벌금' })
+      .setDescriptionLocalizations({ ko: '저번달 내 벌금 확인하기' })
   ].map(c => c.toJSON());
 
   await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
