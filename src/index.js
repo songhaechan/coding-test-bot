@@ -93,13 +93,10 @@ function scheduleDailyAtKSTMidnight(task) {
 
 async function getParticipantIds(guild) {
   if (!PARTICIPANT_ROLE_ID) return [];
+  // Always fetch members to ensure cache is up-to-date (prevents sweep-related stale cache issues)
+  await guild.members.fetch();
   const role = guild.roles.cache.get(PARTICIPANT_ROLE_ID) || await guild.roles.fetch(PARTICIPANT_ROLE_ID).catch(() => null);
   if (!role) return [];
-  // role.members only returns cached members.
-  // If cache is empty (e.g. after restart), fetch all members first.
-  if (role.members.size === 0 && guild.memberCount > 0) {
-    await guild.members.fetch();
-  }
   return role.members
     .filter(m => !m.user.bot)
     .map(m => m.id);
