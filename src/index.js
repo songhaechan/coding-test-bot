@@ -276,6 +276,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         flags: MessageFlags.Ephemeral
       });
     } else if (commandName === 'unverified') {
+      await interaction.deferReply();
       await Storage.updateUser(interaction.user.id, interaction.user.username);
       const guild = await interaction.guild.fetch();
       const dateStr = todayKSTStr();
@@ -283,7 +284,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const verified = await Storage.getVerified(dateStr);
       const unv = participants.filter(id => !verified.includes(id));
       const mentions = unv.slice(0, 50).map(id => `<@${id}>`).join(', ') || '없음';
-      await interaction.reply({ content: `⚠️ 오늘 미인증 현황\n(${dateStr})\n\n대상: ${unv.length}명\n${mentions}` });
+      await interaction.editReply({ content: `⚠️ 오늘 미인증 현황\n(${dateStr})\n\n대상: ${unv.length}명\n${mentions}` });
     } else if (commandName === 'settle') {
       await Storage.updateUser(interaction.user.id, interaction.user.username);
       // Permission check
