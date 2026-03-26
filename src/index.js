@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { Client, GatewayIntentBits, Partials, Events, REST, Routes, SlashCommandBuilder, PermissionFlagsBits, MessageFlags } from 'discord.js';
+import { Client, GatewayIntentBits, Partials, Events, REST, Routes, SlashCommandBuilder, PermissionFlagsBits, MessageFlags, Options } from 'discord.js';
 import Holidays from 'date-holidays';
 import { isHoliday as isHolidayKR } from '@hyunbinseo/holidays-kr';
 import { Storage } from './storage.js';
@@ -93,10 +93,11 @@ function scheduleDailyAtKSTMidnight(task) {
 
 async function getParticipantIds(guild) {
   if (!PARTICIPANT_ROLE_ID) return [];
-  // Always fetch members to ensure cache is up-to-date (prevents sweep-related stale cache issues)
-  await guild.members.fetch();
   const role = guild.roles.cache.get(PARTICIPANT_ROLE_ID) || await guild.roles.fetch(PARTICIPANT_ROLE_ID).catch(() => null);
   if (!role) return [];
+  if (role.members.size === 0 && guild.memberCount > 0) {
+    await guild.members.fetch();
+  }
   return role.members
     .filter(m => !m.user.bot)
     .map(m => m.id);
@@ -197,7 +198,11 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent
   ],
-  partials: [Partials.Channel]
+  partials: [Partials.Channel],
+  makeCache: Options.cacheWithLimits({
+    ...Options.DefaultMakeCacheSettings,
+    GuildMemberManager: Infinity, // 멤버 캐시 무제한 유지 (스윕 방지)
+  })
 });
 
 client.once(Events.ClientReady, async () => {
