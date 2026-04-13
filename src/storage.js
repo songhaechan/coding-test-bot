@@ -200,6 +200,22 @@ export const Storage = {
     return row ? row.cnt : 0;
   },
 
+  async getAllMonthlyFines(yearMonth) {
+    const rows = db.prepare(`
+      SELECT fh.user_id, u.username, SUM(fh.amount) as total
+      FROM fine_history fh
+      LEFT JOIN users u ON fh.user_id = u.id
+      WHERE fh.date LIKE ?
+      GROUP BY fh.user_id
+      ORDER BY total DESC
+    `).all(`${yearMonth}-%`);
+    return rows.map(r => ({
+      userId: r.user_id,
+      username: r.username,
+      total: r.total
+    }));
+  },
+
   async getMonthlyFine(userId, yearMonth) {
     // yearMonth: "2026-03"
     const history = db.prepare(
