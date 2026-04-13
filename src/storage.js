@@ -43,6 +43,12 @@ db.exec(`
     key TEXT PRIMARY KEY,
     value TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS vacations (
+    date TEXT,
+    user_id TEXT,
+    PRIMARY KEY (date, user_id)
+  );
 `);
 
 // Migration logic
@@ -167,6 +173,31 @@ export const Storage = {
 
   async setLastProcessedDate(dateStr) {
     db.prepare('INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)').run('lastProcessedDate', dateStr);
+  },
+
+  async addVacation(dateStr, userId) {
+    db.prepare('INSERT OR IGNORE INTO vacations (date, user_id) VALUES (?, ?)')
+      .run(dateStr, userId);
+  },
+
+  async hasVacation(dateStr, userId) {
+    const row = db.prepare('SELECT 1 FROM vacations WHERE date = ? AND user_id = ?').get(dateStr, userId);
+    return !!row;
+  },
+
+  async removeVacation(dateStr, userId) {
+    db.prepare('DELETE FROM vacations WHERE date = ? AND user_id = ?').run(dateStr, userId);
+  },
+
+  async removeVerification(dateStr, userId) {
+    db.prepare('DELETE FROM verifications WHERE date = ? AND user_id = ?').run(dateStr, userId);
+  },
+
+  async getMonthlyVacationCount(userId, yearMonth) {
+    const row = db.prepare(
+      'SELECT COUNT(*) as cnt FROM vacations WHERE user_id = ? AND date LIKE ?'
+    ).get(userId, `${yearMonth}-%`);
+    return row ? row.cnt : 0;
   },
 
   async getMonthlyFine(userId, yearMonth) {

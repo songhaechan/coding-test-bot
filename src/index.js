@@ -68,6 +68,14 @@ function isRestDay(d) {
   }
 }
 
+function tomorrowKSTStr() {
+  const d = kstNowDate();
+  d.setDate(d.getDate() + 1);
+  return formatDateYYYYMMDD(d);
+}
+
+const MAX_MONTHLY_VACATIONS = 4;
+
 function yesterdayIsRestDayKST() {
   const d = kstNowDate();
   d.setDate(d.getDate() - 1);
@@ -137,6 +145,62 @@ function isImageAttachment(att) {
   if (ct.startsWith('image/')) return true;
   const name = (att.name || '').toLowerCase();
   return ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'].some(ext => name.endsWith(ext));
+}
+
+function isRestDayForDate(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return isRestDay(new Date(y, m - 1, d));
+}
+
+async function handleVacation(interaction, dateStr, dateLabel) {
+  const member = await interaction.guild.members.fetch(interaction.user.id);
+  if (!member.roles.cache.has(PARTICIPANT_ROLE_ID)) {
+    return interaction.reply({ content: '참여자 역할이 없습니다.', flags: MessageFlags.Ephemeral });
+  }
+
+  if (isRestDayForDate(dateStr)) {
+    return interaction.reply({ content: `${dateLabel}(${dateStr})은 쉬는 날이라 휴가를 사용할 필요가 없습니다.`, flags: MessageFlags.Ephemeral });
+  }
+
+  const already = await Storage.hasVacation(dateStr, interaction.user.id);
+  if (already) {
+    return interaction.reply({ content: `${dateLabel}(${dateStr})에 이미 휴가를 사용했습니다.`, flags: MessageFlags.Ephemeral });
+  }
+
+  const yearMonth = dateStr.slice(0, 7);
+  const count = await Storage.getMonthlyVacationCount(interaction.user.id, yearMonth);
+  if (count >= MAX_MONTHLY_VACATIONS) {
+    return interaction.reply({ content: `이번 달 휴가를 모두 사용했습니다. (${count}/${MAX_MONTHLY_VACATIONS})`, flags: MessageFlags.Ephemeral });
+  }
+
+  await Storage.addVacation(dateStr, interaction.user.id);
+  await Storage.markVerified(dateStr, interaction.user.id);
+
+  const newCount = count + 1;
+  await interaction.reply({
+    content: `🏖️ ${interaction.user.username}님이 ${dateLabel}(${dateStr}) 휴가를 사용했습니다. (이번 달 ${newCount}/${MAX_MONTHLY_VACATIONS})`
+  });
+}
+
+async function handleCancelVacation(interaction, dateStr, dateLabel) {
+  const member = await interaction.guild.members.fetch(interaction.user.id);
+  if (!member.roles.cache.has(PARTICIPANT_ROLE_ID)) {
+    return interaction.reply({ content: '참여자 역할이 없습니다.', flags: MessageFlags.Ephemeral });
+  }
+
+  const hasVac = await Storage.hasVacation(dateStr, interaction.user.id);
+  if (!hasVac) {
+    return interaction.reply({ content: `${dateLabel}(${dateStr})에 사용한 휴가가 없습니다.`, flags: MessageFlags.Ephemeral });
+  }
+
+  await Storage.removeVacation(dateStr, interaction.user.id);
+  await Storage.removeVerification(dateStr, interaction.user.id);
+
+  const yearMonth = dateStr.slice(0, 7);
+  const count = await Storage.getMonthlyVacationCount(interaction.user.id, yearMonth);
+  await interaction.reply({
+    content: `🏖️ ${interaction.user.username}님이 ${dateLabel}(${dateStr}) 휴가를 취소했습니다. (이번 달 ${count}/${MAX_MONTHLY_VACATIONS})`
+  });
 }
 
 async function handleVerification(message) {
@@ -335,6 +399,18 @@ client.on(Events.InteractionCreate, async (interaction) => {
         content: `💰 ${label}(${yearMonth}) 내 벌금\n\n총액: **${total.toLocaleString()}원** (${history.length}회)\n\n날짜별 내역:\n${dateLines}\n\n벌금은 매월초에 3333369209276 카카오뱅크(송해찬)으로 보내주세요~! 보내주시고 메세지 부탁드려요!`,
         flags: MessageFlags.Ephemeral
       });
+    } else if (commandName === 'vacation') {
+      await Storage.updateUser(interaction.user.id, interaction.user.username);
+      await handleVacation(interaction, todayKSTStr(), '오늘');
+    } else if (commandName === 'tomorrowvacation') {
+      await Storage.updateUser(interaction.user.id, interaction.user.username);
+      await handleVacation(interaction, tomorrowKSTStr(), '내일');
+    } else if (commandName === 'cancelvacation') {
+      await Storage.updateUser(interaction.user.id, interaction.user.username);
+      await handleCancelVacation(interaction, todayKSTStr(), '오늘');
+    } else if (commandName === 'canceltomorrowvacation') {
+      await Storage.updateUser(interaction.user.id, interaction.user.username);
+      await handleCancelVacation(interaction, tomorrowKSTStr(), '내일');
     } else if (commandName === 'join') {
       await Storage.updateUser(interaction.user.id, interaction.user.username);
       if (!PARTICIPANT_ROLE_ID) return interaction.reply({ content: '참여자 역할 ID가 설정되지 않았습니다.', flags: MessageFlags.Ephemeral });
@@ -433,7 +509,27 @@ async function registerCommandsOnce() {
       .setName('lastmonthfine')
       .setDescription('Check your fines for last month')
       .setNameLocalizations({ ko: '저번달내벌금' })
-      .setDescriptionLocalizations({ ko: '저번달 내 벌금 확인하기' })
+      .setDescriptionLocalizations({ ko: '저번달 내 벌금 확인하기' }),
+    new SlashCommandBuilder()
+      .setName('vacation')
+      .setDescription('Use vacation for today (no fine)')
+      .setNameLocalizations({ ko: '휴가' })
+      .setDescriptionLocalizations({ ko: '오늘 휴가 사용 (벌금 면제)' }),
+    new SlashCommandBuilder()
+      .setName('tomorrowvacation')
+      .setDescription('Use vacation for tomorrow (no fine)')
+      .setNameLocalizations({ ko: '내일휴가' })
+      .setDescriptionLocalizations({ ko: '내일 휴가 사용 (벌금 면제)' }),
+    new SlashCommandBuilder()
+      .setName('cancelvacation')
+      .setDescription('Cancel today\'s vacation')
+      .setNameLocalizations({ ko: '휴가취소' })
+      .setDescriptionLocalizations({ ko: '오늘 휴가 취소' }),
+    new SlashCommandBuilder()
+      .setName('canceltomorrowvacation')
+      .setDescription('Cancel tomorrow\'s vacation')
+      .setNameLocalizations({ ko: '내일휴가취소' })
+      .setDescriptionLocalizations({ ko: '내일 휴가 취소' })
   ].map(c => c.toJSON());
 
   await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
