@@ -420,6 +420,22 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await interaction.editReply({
         content: `🧾 저번달(${yearMonth}) 벌금 정산\n\n${lines.join('\n') || '없음'}\n\n총 합산: **${grandTotal.toLocaleString()}원**`
       });
+    } else if (commandName === 'thismonthtotalfine' || commandName === 'lastmonthtotalfine') {
+      await Storage.updateUser(interaction.user.id, interaction.user.username);
+      const kst = kstNowDate();
+      let yearMonth;
+      if (commandName === 'lastmonthtotalfine') {
+        const d = new Date(kst.getFullYear(), kst.getMonth() - 1, 1);
+        yearMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      } else {
+        yearMonth = `${kst.getFullYear()}-${String(kst.getMonth() + 1).padStart(2, '0')}`;
+      }
+      const label = commandName === 'thismonthtotalfine' ? '이번달' : '저번달';
+      const allFines = await Storage.getAllMonthlyFines(yearMonth);
+      const grandTotal = allFines.reduce((sum, r) => sum + r.total, 0);
+      await interaction.reply({
+        content: `💰 ${label}(${yearMonth}) 벌금 총액: **${grandTotal.toLocaleString()}원**`
+      });
     } else if (commandName === 'thismonthdiligent' || commandName === 'lastmonthdiligent') {
       await interaction.deferReply();
       await Storage.updateUser(interaction.user.id, interaction.user.username);
@@ -565,6 +581,16 @@ async function registerCommandsOnce() {
       .setDescription('Check your fines for last month')
       .setNameLocalizations({ ko: '저번달내벌금' })
       .setDescriptionLocalizations({ ko: '저번달 내 벌금 확인하기' }),
+    new SlashCommandBuilder()
+      .setName('thismonthtotalfine')
+      .setDescription('Total fines for this month')
+      .setNameLocalizations({ ko: '이번달벌금총액' })
+      .setDescriptionLocalizations({ ko: '이번달 벌금 총액 보기' }),
+    new SlashCommandBuilder()
+      .setName('lastmonthtotalfine')
+      .setDescription('Total fines for last month')
+      .setNameLocalizations({ ko: '저번달벌금총액' })
+      .setDescriptionLocalizations({ ko: '저번달 벌금 총액 보기' }),
     new SlashCommandBuilder()
       .setName('thismonthdiligent')
       .setDescription('This month coding diligence ranking (fewest fines)')
