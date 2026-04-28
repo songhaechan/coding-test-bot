@@ -200,6 +200,21 @@ export const Storage = {
     return row ? row.cnt : 0;
   },
 
+  async getMonthlyFineCountsByUser(yearMonth) {
+    const rows = db.prepare(`
+      SELECT fh.user_id, u.username, COUNT(*) as cnt
+      FROM fine_history fh
+      LEFT JOIN users u ON fh.user_id = u.id
+      WHERE fh.date LIKE ?
+      GROUP BY fh.user_id
+    `).all(`${yearMonth}-%`);
+    return rows.map(r => ({
+      userId: r.user_id,
+      username: r.username,
+      count: r.cnt
+    }));
+  },
+
   async getAllMonthlyFines(yearMonth) {
     const rows = db.prepare(`
       SELECT fh.user_id, u.username, SUM(fh.amount) as total

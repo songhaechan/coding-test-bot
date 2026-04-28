@@ -420,6 +420,40 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await interaction.editReply({
         content: `🧾 저번달(${yearMonth}) 벌금 정산\n\n${lines.join('\n') || '없음'}\n\n총 합산: **${grandTotal.toLocaleString()}원**`
       });
+    } else if (commandName === 'thismonthdiligent' || commandName === 'lastmonthdiligent') {
+      await interaction.deferReply();
+      await Storage.updateUser(interaction.user.id, interaction.user.username);
+      const kst = kstNowDate();
+      let yearMonth;
+      if (commandName === 'lastmonthdiligent') {
+        const d = new Date(kst.getFullYear(), kst.getMonth() - 1, 1);
+        yearMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      } else {
+        yearMonth = `${kst.getFullYear()}-${String(kst.getMonth() + 1).padStart(2, '0')}`;
+      }
+      const label = commandName === 'thismonthdiligent' ? '이번달' : '저번달';
+      const guild = await interaction.guild.fetch();
+      const participantIds = await getParticipantIds(guild);
+      const fineCounts = await Storage.getMonthlyFineCountsByUser(yearMonth);
+      const countMap = new Map(fineCounts.map(r => [r.userId, r]));
+      const merged = participantIds.map(id => {
+        const entry = countMap.get(id);
+        const member = guild.members.cache.get(id);
+        const name = entry?.username || (member ? (member.nickname || member.user.username) : id);
+        return { name, count: entry ? entry.count : 0 };
+      }).sort((a, b) => a.count - b.count);
+      let rank = 0;
+      let prevCount = -1;
+      const lines = merged.map((r, i) => {
+        if (r.count !== prevCount) {
+          rank = i + 1;
+          prevCount = r.count;
+        }
+        return `${rank}등 ${r.name} — ${r.count}회`;
+      });
+      await interaction.editReply({
+        content: `🏅 ${label}(${yearMonth}) 코딩 심사 랭킹\n\n${lines.join('\n') || '없음'}`
+      });
     } else if (commandName === 'vacation') {
       await Storage.updateUser(interaction.user.id, interaction.user.username);
       await handleVacation(interaction, todayKSTStr(), '오늘');
@@ -531,6 +565,16 @@ async function registerCommandsOnce() {
       .setDescription('Check your fines for last month')
       .setNameLocalizations({ ko: '저번달내벌금' })
       .setDescriptionLocalizations({ ko: '저번달 내 벌금 확인하기' }),
+    new SlashCommandBuilder()
+      .setName('thismonthdiligent')
+      .setDescription('This month coding diligence ranking (fewest fines)')
+      .setNameLocalizations({ ko: '이번달코심자' })
+      .setDescriptionLocalizations({ ko: '이번달 코딩 심사 랭킹 (벌금 적은 순)' }),
+    new SlashCommandBuilder()
+      .setName('lastmonthdiligent')
+      .setDescription('Last month coding diligence ranking (fewest fines)')
+      .setNameLocalizations({ ko: '저번달코심자' })
+      .setDescriptionLocalizations({ ko: '저번달 코딩 심사 랭킹 (벌금 적은 순)' }),
     new SlashCommandBuilder()
       .setName('lastmonthsettle')
       .setDescription('View last month fine summary for all users')
