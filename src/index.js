@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { randomInt } from 'crypto';
 import { Client, GatewayIntentBits, Partials, Events, REST, Routes, SlashCommandBuilder, PermissionFlagsBits, MessageFlags, Options } from 'discord.js';
 import Holidays from 'date-holidays';
 import { isHoliday as isHolidayKR } from '@hyunbinseo/holidays-kr';
@@ -50,6 +51,9 @@ function isRestDay(d) {
     const dow = d.getDay(); // 0: Sun, 6: Sat
     const isWeekend = (dow === 0 || dow === 6);
     if (isWeekend) return true;
+
+    // 근로자의 날 (May 1st) 처리
+    if (d.getMonth() === 4 && d.getDate() === 1) return true;
 
     // 1. Try specialized Korean holiday library (Very accurate for 2025-2026)
     try {
@@ -320,7 +324,23 @@ client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
   const { commandName } = interaction;
   try {
-    if (commandName === 'stats') {
+    if (commandName === 'pick') {
+      const namesStr = interaction.options.getString('names');
+      const names = namesStr.split(/[\s,]+/).filter(n => n.trim() !== '');
+      if (names.length === 0) {
+        return interaction.reply({ content: '이름을 제대로 입력해주세요.', flags: MessageFlags.Ephemeral });
+      }
+      if (names.length === 1) {
+        return interaction.reply({ content: `후보가 한 명뿐입니다: **${names[0]}**` });
+      }
+
+      const pickedIndex = randomInt(0, names.length);
+      const pickedName = names[pickedIndex];
+
+      await interaction.reply({
+        content: `🎲 후보 (${names.length}명): ${names.join(', ')}\n\n🎉 당첨: **${pickedName}** 🎉`
+      });
+    } else if (commandName === 'stats') {
       const dateStr = todayKSTStr();
       await Storage.updateUser(interaction.user.id, interaction.user.username);
       const fine = await Storage.getFine(interaction.user.id);
@@ -625,7 +645,13 @@ async function registerCommandsOnce() {
       .setName('canceltomorrowvacation')
       .setDescription('Cancel tomorrow\'s vacation')
       .setNameLocalizations({ ko: '내일휴가취소' })
-      .setDescriptionLocalizations({ ko: '내일 휴가 취소' })
+      .setDescriptionLocalizations({ ko: '내일 휴가 취소' }),
+    new SlashCommandBuilder()
+      .setName('pick')
+      .setDescription('Pick one person randomly from the given names')
+      .setNameLocalizations({ ko: '뽑기' })
+      .setDescriptionLocalizations({ ko: '입력한 이름들 중 한 명을 랜덤으로 뽑습니다' })
+      .addStringOption(o => o.setName('names').setDescription('이름들을 띄어쓰기나 쉼표로 구분해서 입력해주세요').setRequired(true))
   ].map(c => c.toJSON());
 
   await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
